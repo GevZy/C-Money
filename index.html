@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>FinFlow — Personal Finance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════
+       TOP HEADER
+  ═══════════════════════════════════════════ -->
+  <header class="top-bar">
+    <div class="top-bar-inner">
+      <div class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">FIN<span class="logo-accent">FLOW</span></span>
+      </div>
+      <div class="top-bar-right">
+        <span class="month-badge" id="currentMonthBadge">— —</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════
+       PAGES
+  ═══════════════════════════════════════════ -->
+  <main class="page-container">
+
+    <!-- ──────────── HOME PAGE ──────────── -->
+    <section class="page active" id="page-home">
+      <div class="scroll-area">
+
+        <!-- Balance Summary -->
+        <div class="hero-card">
+          <div class="hero-label">Current Balance</div>
+          <div class="hero-amount" id="homeBalance">0 <span class="currency">RWF</span></div>
+          <div class="hero-sub-row">
+            <div class="hero-sub">
+              <div class="sub-dot dot-savings"></div>
+              <div>
+                <div class="sub-label">Saved</div>
+                <div class="sub-val" id="homeSaved">0 RWF</div>
+              </div>
+            </div>
+            <div class="hero-sub">
+              <div class="sub-dot dot-bills"></div>
+              <div>
+                <div class="sub-label">Bills Set Aside</div>
+                <div class="sub-val" id="homeBills">0 RWF</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="section-header">
+          <span class="section-title">Monthly Goals</span>
+          <span class="section-hint">tap a goal to allocate</span>
+        </div>
+
+        <!-- Monthly Bills Goal -->
+        <div class="goal-card" id="billsGoalCard">
+          <div class="goal-top">
+            <div class="goal-info">
+              <span class="goal-icon">⚡</span>
+              <div>
+                <div class="goal-name">Monthly Bills</div>
+                <div class="goal-meta" id="billsGoalMeta">0 / 0 RWF</div>
+              </div>
+            </div>
+            <div class="goal-pct" id="billsGoalPct">0%</div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-bills" id="billsProgress" style="width:0%"></div>
+          </div>
+          <div class="goal-items" id="billsItemList"></div>
+        </div>
+
+        <!-- Savings Goal -->
+        <div class="goal-card" id="savingsGoalCard">
+          <div class="goal-top">
+            <div class="goal-info">
+              <span class="goal-icon">💎</span>
+              <div>
+                <div class="goal-name">Savings</div>
+                <div class="goal-meta" id="savingsGoalMeta">0 / 0 RWF</div>
+              </div>
+            </div>
+            <div class="goal-pct" id="savingsGoalPct">0%</div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-savings" id="savingsProgress" style="width:0%"></div>
+          </div>
+          <div class="goal-items" id="savingsItemList"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ──────────── EXPENSES PAGE ──────────── -->
+    <section class="page" id="page-expenses">
+      <div class="scroll-area">
+
+        <!-- Top 3 Numbers -->
+        <div class="stats-row">
+          <div class="stat-chip">
+            <div class="stat-label">Balance</div>
+            <div class="stat-num blue" id="expBalance">0</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-label">Income</div>
+            <div class="stat-num green" id="expIncome">0</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-label">Expenses</div>
+            <div class="stat-num red" id="expTotal">0</div>
+          </div>
+        </div>
+
+        <!-- Add Expense Button -->
+        <button class="add-btn" id="openAddExpense">+ Log Expense</button>
+
+        <!-- Search -->
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input type="text" class="search-input" id="expenseSearch" placeholder="Search by name or ID…" />
+        </div>
+
+        <!-- List -->
+        <div class="expense-list" id="expenseList">
+          <div class="empty-state">No expenses yet.<br/>Tap "Log Expense" to start.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ──────────── MONTHLY BILLS PAGE ──────────── -->
+    <section class="page" id="page-bills">
+      <div class="scroll-area">
+
+        <div class="section-header">
+          <span class="section-title">Monthly Bills</span>
+          <button class="icon-btn" id="openAddBill">＋</button>
+        </div>
+
+        <div class="bills-list" id="billsList">
+          <div class="empty-state">No bills set up.<br/>Tap ＋ to add a monthly bill.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ──────────── SAVINGS PAGE ──────────── -->
+    <section class="page" id="page-savings">
+      <div class="scroll-area">
+
+        <div class="hero-card savings-hero">
+          <div class="hero-label">Total Saved This Month</div>
+          <div class="hero-amount" id="savingsTotal">0 <span class="currency">RWF</span></div>
+          <div class="hero-label" style="margin-top:.5rem;font-size:.75rem">Combined Target</div>
+          <div class="hero-amount" style="font-size:1.4rem" id="savingsTarget">0 <span class="currency">RWF</span></div>
+        </div>
+
+        <div class="section-header">
+          <span class="section-title">Savings Targets</span>
+          <button class="icon-btn" id="openAddSaving">＋</button>
+        </div>
+
+        <div class="bills-list" id="savingsTargetsList">
+          <div class="empty-state">No savings targets.<br/>Tap ＋ to add one.</div>
+        </div>
+
+        <div class="section-header" style="margin-top:1.5rem">
+          <span class="section-title">Savings Entries</span>
+        </div>
+
+        <div class="expense-list" id="savingsLedger">
+          <div class="empty-state">No savings entries yet.<br/>Log an expense and link a SAV- ID to start.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ──────────── SETTINGS PAGE ──────────── -->
+    <section class="page" id="page-settings">
+      <div class="scroll-area">
+
+        <div class="settings-hero">
+          <span class="settings-icon">⚙</span>
+          <div class="settings-title">Settings</div>
+          <div class="settings-sub">Manage your month & data</div>
+        </div>
+
+        <!-- Monthly Income -->
+        <div class="settings-card">
+          <div class="settings-card-title">Base Monthly Income</div>
+          <div class="settings-row">
+            <input type="number" class="settings-input" id="monthlyIncomeInput" placeholder="e.g. 150000" />
+            <button class="settings-btn blue-btn" id="saveIncomeBtn">Save</button>
+          </div>
+          <div class="settings-hint">Current: <span id="currentIncome">0 RWF</span></div>
+        </div>
+
+        <!-- Miscellaneous Income -->
+        <div class="settings-card">
+          <div class="settings-card-title">Miscellaneous Income</div>
+          <p class="settings-desc">Log money received outside your base income — gigs, transfers, cash gifts, etc.</p>
+          <div class="settings-row">
+            <input type="text" class="settings-input" id="miscIncomeLabel" placeholder="e.g. Freelance job" style="flex:2" />
+            <input type="number" class="settings-input" id="miscIncomeAmount" placeholder="Amount" style="flex:1.2" />
+            <button class="settings-btn blue-btn" id="saveMiscIncomeBtn">Add</button>
+          </div>
+          <div class="settings-hint" style="margin-bottom:.75rem">Total income: <span id="totalIncomeDisplay">0 RWF</span></div>
+          <div id="miscIncomeList"></div>
+        </div>
+
+        <!-- Export -->
+        <div class="settings-card">
+          <div class="settings-card-title">Export Data</div>
+          <p class="settings-desc">Download a full JSON snapshot of this month's data.</p>
+          <button class="settings-btn blue-btn full-btn" id="exportBtn">↓ Export JSON</button>
+        </div>
+
+        <!-- Reset -->
+        <div class="settings-card danger-card">
+          <div class="settings-card-title danger-title">New Month Reset</div>
+          <p class="settings-desc">Clears all expenses and resets allocations. Bills & savings targets are kept. This cannot be undone.</p>
+          <button class="settings-btn danger-btn full-btn" id="resetBtn">⚠ Reset for New Month</button>
+        </div>
+
+        <div class="app-version">FinFlow v1.0 · Built for you only</div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       BOTTOM NAV
+  ═══════════════════════════════════════════ -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-page="home">
+      <span class="nav-icon">⌂</span>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-btn" data-page="expenses">
+      <span class="nav-icon">↕</span>
+      <span class="nav-label">Expenses</span>
+    </button>
+    <button class="nav-btn" data-page="bills">
+      <span class="nav-icon">⚡</span>
+      <span class="nav-label">Bills</span>
+    </button>
+    <button class="nav-btn" data-page="savings">
+      <span class="nav-icon">◆</span>
+      <span class="nav-label">Savings</span>
+    </button>
+    <button class="nav-btn" data-page="settings">
+      <span class="nav-icon">⚙</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       MODALS
+  ═══════════════════════════════════════════ -->
+
+  <!-- Add Expense Modal -->
+  <div class="modal-overlay" id="addExpenseModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Log Expense</span>
+        <button class="modal-close" data-close="addExpenseModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Name</label>
+        <input type="text" class="modal-input" id="expName" placeholder="e.g. Coffee, Moto, Rent…" />
+
+        <label class="field-label">Amount (RWF)</label>
+        <input type="number" class="modal-input" id="expAmount" placeholder="e.g. 2000" />
+
+        <label class="field-label">ID <span class="field-hint">(optional — use BILL- or SAV- ID to allocate)</span></label>
+        <input type="text" class="modal-input" id="expBillId" placeholder="e.g. BILL-001 or SAV-001" />
+
+        <button class="settings-btn blue-btn full-btn" id="submitExpense">Log Expense</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Bill Modal -->
+  <div class="modal-overlay" id="addBillModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Add Monthly Bill</span>
+        <button class="modal-close" data-close="addBillModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Bill Name</label>
+        <input type="text" class="modal-input" id="billName" placeholder="e.g. Food, Rent, Transport…" />
+
+        <label class="field-label">Target Amount (RWF)</label>
+        <input type="number" class="modal-input" id="billTarget" placeholder="e.g. 30000" />
+
+        <label class="field-label">Bill ID <span class="field-hint">(unique — used to link expenses)</span></label>
+        <input type="text" class="modal-input" id="billId" placeholder="e.g. BILL-001" />
+
+        <button class="settings-btn blue-btn full-btn" id="submitBill">Add Bill</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Saving Target Modal -->
+  <div class="modal-overlay" id="addSavingModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Add Savings Target</span>
+        <button class="modal-close" data-close="addSavingModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Target Name</label>
+        <input type="text" class="modal-input" id="savingName" placeholder="e.g. Keyboard, Mouse…" />
+
+        <label class="field-label">Goal Amount (RWF)</label>
+        <input type="number" class="modal-input" id="savingTarget" placeholder="e.g. 25000" />
+
+        <label class="field-label">Savings ID <span class="field-hint">(unique — used to link expenses)</span></label>
+        <input type="text" class="modal-input" id="savingId" placeholder="e.g. SAV-001" />
+
+        <button class="settings-btn blue-btn full-btn" id="submitSaving">Add Target</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Reset Modal -->
+  <div class="modal-overlay" id="confirmResetModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title danger-title">⚠ Reset Month?</span>
+        <button class="modal-close" data-close="confirmResetModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="settings-desc" style="margin-bottom:1.5rem">This will clear all expenses and reset allocations for the new month. Bill templates and savings targets are kept. This <strong>cannot be undone</strong>.</p>
+        <button class="settings-btn danger-btn full-btn" id="confirmResetBtn">Yes, Reset Now</button>
+        <button class="settings-btn full-btn" style="margin-top:.75rem;background:var(--surface-2)" data-close="confirmResetModal">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
