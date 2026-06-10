@@ -1,18 +1,20 @@
 // api/data.js — Vercel Serverless Function
-// GET  → load finflow data from KV
-// POST → save finflow data to KV
+// GET  → load finflow data from Upstash Redis
+// POST → save finflow data to Upstash Redis
 //
-// Required env vars (set in Vercel dashboard):
-//   KV_REST_API_URL     ← auto-filled when you connect a KV store
-//   KV_REST_API_TOKEN   ← auto-filled when you connect a KV store
-//   FINFLOW_SECRET      ← a password you choose yourself (any string)
+// Required env vars (auto-filled when you connect Upstash in Vercel Storage):
+//   UPSTASH_REDIS_REST_URL
+//   UPSTASH_REDIS_REST_TOKEN
+//
+// You add this one manually in Vercel → Settings → Environment Variables:
+//   FINFLOW_SECRET   ← the password you put in app.js
 
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 
+const redis    = Redis.fromEnv();
 const DATA_KEY = "finflow_data";
 
 export default async function handler(req, res) {
-  // Allow requests from any origin (it's your private app anyway)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-finflow-secret");
@@ -31,11 +33,11 @@ export default async function handler(req, res) {
   // ── GET — load data ─────────────────────────────────────────────
   if (req.method === "GET") {
     try {
-      const data = await kv.get(DATA_KEY);
+      const data = await redis.get(DATA_KEY);
       return res.status(200).json({ data: data ?? null });
     } catch (err) {
-      console.error("[FinFlow] KV GET error:", err);
-      return res.status(500).json({ error: "Failed to load data from KV." });
+      console.error("[FinFlow] Redis GET error:", err);
+      return res.status(500).json({ error: "Failed to load data." });
     }
   }
 
@@ -46,11 +48,11 @@ export default async function handler(req, res) {
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         return res.status(400).json({ error: "Request body must be a JSON object." });
       }
-      await kv.set(DATA_KEY, body);
+      await redis.set(DATA_KEY, body);
       return res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("[FinFlow] KV SET error:", err);
-      return res.status(500).json({ error: "Failed to save data to KV." });
+      console.error("[FinFlow] Redis SET error:", err);
+      return res.status(500).json({ error: "Failed to save data." });
     }
   }
 
