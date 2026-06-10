@@ -1,8 +1,13 @@
 /* ═══════════════════════════════════════════
    FINFLOW — app.js
-   All data lives in localStorage under the
-   key "finflow_data" as a single JSON object.
+   Data is synced to Vercel KV via /api/data.
+   localStorage is used as a fast local cache
+   so the app works instantly on load.
 ═══════════════════════════════════════════ */
+
+// ─── CONFIG ─────────────────────────────────
+// Set this to the same value as FINFLOW_SECRET in your Vercel env vars.
+const FINFLOW_SECRET = "QT123";
 
 // ─── DATA SCHEMA ────────────────────────────
 const DEFAULT_STATE = {
@@ -18,8 +23,8 @@ const DEFAULT_STATE = {
   _nextMiscId: 1,
 };
 
-// ─── STORAGE ────────────────────────────────
-function loadState() {
+// ─── LOCAL CACHE ────────────────────────────
+function loadLocal() {
   try {
     const raw = localStorage.getItem("finflow_data");
     if (raw) return { ...DEFAULT_STATE, ...JSON.parse(raw) };
@@ -27,16 +32,67 @@ function loadState() {
   return { ...DEFAULT_STATE, month: currentMonthLabel() };
 }
 
-function saveState() {
-  localStorage.setItem("finflow_data", JSON.stringify(state));
+function saveLocal(s) {
+  localStorage.setItem("finflow_data", JSON.stringify(s));
 }
+
+// ─── REMOTE SYNC ────────────────────────────
+let _syncTimer = null;
+
+async function loadRemote() {
+  try {
+    const res = await fetch("/api/data", {
+      headers: { "x-finflow-secret": FINFLOW_SECRET }
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const { data } = await res.json();
+    return data ? { ...DEFAULT_STATE, ...data } : null;
+  } catch (err) {
+    console.warn("Remote load failed:", err);
+    return null;
+  }
+}
+
+async function saveRemote(s) {
+  try {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-finflow-secret": FINFLOW_SECRET
+      },
+      body: JSON.stringify(s)
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    setSyncStatus("saved");
+  } catch (err) {
+    console.warn("Remote save failed:", err);
+    setSyncStatus("error");
+  }
+}
+
+// Debounced: waits 1.2s after last change before writing to KV
+function scheduleSave() {
+  clearTimeout(_syncTimer);
+  setSyncStatus("saving");
+  _syncTimer = setTimeout(() => saveRemote(state), 1200);
+}
+
+function setSyncStatus(status) {
+  const el = document.getElementById("syncStatus");
+  if (!el) return;
+  const labels = { saving: "● syncing…", saved: "✓ synced", error: "⚠ offline" };
+  const colors = { saving: "var(--text-3)", saved: "var(--green)", error: "var(--yellow)" };
+  el.textContent = labels[status] || "";
+  el.style.color  = colors[status] || "var(--text-3)";
+}
+
+// ─── STATE ──────────────────────────────────
+let state = loadLocal();   // boot instantly from cache
 
 function currentMonthLabel() {
   return new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
-
-// ─── STATE ──────────────────────────────────
-let state = loadState();
 
 // ─── HELPERS ────────────────────────────────
 function fmt(n) {
@@ -66,6 +122,12 @@ function escHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ─── SAVE EVERYWHERE ────────────────────────
+function persist() {
+  saveLocal(state);
+  scheduleSave();
 }
 
 // ─── DERIVED VALUES ─────────────────────────
@@ -110,7 +172,7 @@ function renderHome() {
   document.getElementById("homeSaved").textContent = fmt(saved) + " RWF";
   document.getElementById("homeBills").textContent = fmt(bills) + " RWF";
 
-  // ── Bills goal block ──
+  // Bills goal block
   const totalBillTarget = state.bills.reduce((s, b) => s + b.target, 0);
   const billsAlloc      = totalAllocatedToBills();
   const billsPct        = pct(billsAlloc, totalBillTarget);
@@ -121,27 +183,24 @@ function renderHome() {
   document.getElementById("billsProgress").style.width = billsPct + "%";
 
   const billItemList = document.getElementById("billsItemList");
-  if (state.bills.length === 0) {
-    billItemList.innerHTML =
-      '<div style="font-size:.75rem;color:var(--text-3);padding:.25rem 0">No bills added yet.</div>';
-  } else {
-    billItemList.innerHTML = state.bills.map(b => {
-      const p = pct(b.allocated || 0, b.target);
-      return `
-        <div class="goal-item">
-          <div class="goal-item-top">
-            <span class="goal-item-name">${escHtml(b.name)}</span>
-            <span class="goal-item-pct">${p}%</span>
-          </div>
-          <div class="goal-item-meta">${fmt(b.allocated||0)} / ${fmt(b.target)} RWF</div>
-          <div class="progress-track" style="height:4px">
-            <div class="progress-fill fill-item" style="width:${p}%"></div>
-          </div>
-        </div>`;
-    }).join("");
-  }
+  billItemList.innerHTML = state.bills.length === 0
+    ? '<div style="font-size:.75rem;color:var(--text-3);padding:.25rem 0">No bills added yet.</div>'
+    : state.bills.map(b => {
+        const p = pct(b.allocated || 0, b.target);
+        return `
+          <div class="goal-item">
+            <div class="goal-item-top">
+              <span class="goal-item-name">${escHtml(b.name)}</span>
+              <span class="goal-item-pct">${p}%</span>
+            </div>
+            <div class="goal-item-meta">${fmt(b.allocated||0)} / ${fmt(b.target)} RWF</div>
+            <div class="progress-track" style="height:4px">
+              <div class="progress-fill fill-item" style="width:${p}%"></div>
+            </div>
+          </div>`;
+      }).join("");
 
-  // ── Savings goal block ──
+  // Savings goal block
   const totalSavTarget = state.savingTargets.reduce((s, t) => s + t.target, 0);
   const savAlloc       = totalAllocatedToSavings();
   const savPct         = pct(savAlloc, totalSavTarget);
@@ -152,25 +211,22 @@ function renderHome() {
   document.getElementById("savingsProgress").style.width = savPct + "%";
 
   const savItemList = document.getElementById("savingsItemList");
-  if (state.savingTargets.length === 0) {
-    savItemList.innerHTML =
-      '<div style="font-size:.75rem;color:var(--text-3);padding:.25rem 0">No savings targets set yet.</div>';
-  } else {
-    savItemList.innerHTML = state.savingTargets.map(t => {
-      const p = pct(t.allocated || 0, t.target);
-      return `
-        <div class="goal-item">
-          <div class="goal-item-top">
-            <span class="goal-item-name">${escHtml(t.name)}</span>
-            <span class="goal-item-pct">${p}%</span>
-          </div>
-          <div class="goal-item-meta">${fmt(t.allocated||0)} / ${fmt(t.target)} RWF</div>
-          <div class="progress-track" style="height:4px">
-            <div class="progress-fill fill-savings" style="width:${p}%"></div>
-          </div>
-        </div>`;
-    }).join("");
-  }
+  savItemList.innerHTML = state.savingTargets.length === 0
+    ? '<div style="font-size:.75rem;color:var(--text-3);padding:.25rem 0">No savings targets set yet.</div>'
+    : state.savingTargets.map(t => {
+        const p = pct(t.allocated || 0, t.target);
+        return `
+          <div class="goal-item">
+            <div class="goal-item-top">
+              <span class="goal-item-name">${escHtml(t.name)}</span>
+              <span class="goal-item-pct">${p}%</span>
+            </div>
+            <div class="goal-item-meta">${fmt(t.allocated||0)} / ${fmt(t.target)} RWF</div>
+            <div class="progress-track" style="height:4px">
+              <div class="progress-fill fill-savings" style="width:${p}%"></div>
+            </div>
+          </div>`;
+      }).join("");
 }
 
 // ─── RENDER: EXPENSES ───────────────────────
@@ -196,7 +252,7 @@ function renderExpenses(filter = "") {
   }
 
   el.innerHTML = filtered.map(e => {
-    const isSav  = !!e.savId;
+    const isSav   = !!e.savId;
     const hasBill = !!e.billId;
     const cls     = isSav ? "is-savings" : (hasBill ? "is-bill" : "");
     const amtCls  = isSav ? "savings" : "";
@@ -220,29 +276,26 @@ function renderExpenses(filter = "") {
 // ─── RENDER: BILLS PAGE ─────────────────────
 function renderBillsPage() {
   const billsEl = document.getElementById("billsList");
-  if (state.bills.length === 0) {
-    billsEl.innerHTML =
-      '<div class="empty-state">No bills set up.<br/>Tap ＋ to add a monthly bill.</div>';
-  } else {
-    billsEl.innerHTML = state.bills.map(b => {
-      const p = pct(b.allocated || 0, b.target);
-      return `
-        <div class="bill-item">
-          <div class="bill-item-top">
-            <div class="bill-item-left">
-              <div class="bill-item-name">${escHtml(b.name)}</div>
-              <div style="margin-top:.3rem"><span class="bill-id-tag">${escHtml(b.id)}</span></div>
+  billsEl.innerHTML = state.bills.length === 0
+    ? '<div class="empty-state">No bills set up.<br/>Tap ＋ to add a monthly bill.</div>'
+    : state.bills.map(b => {
+        const p = pct(b.allocated || 0, b.target);
+        return `
+          <div class="bill-item">
+            <div class="bill-item-top">
+              <div class="bill-item-left">
+                <div class="bill-item-name">${escHtml(b.name)}</div>
+                <div style="margin-top:.3rem"><span class="bill-id-tag">${escHtml(b.id)}</span></div>
+              </div>
+              <div class="bill-item-pct">${p}%</div>
             </div>
-            <div class="bill-item-pct">${p}%</div>
-          </div>
-          <div class="bill-item-meta">${fmt(b.allocated||0)} / ${fmt(b.target)} RWF allocated</div>
-          <div class="progress-track">
-            <div class="progress-fill fill-bills" style="width:${p}%"></div>
-          </div>
-          <button class="bill-delete" data-delete-bill="${b.id}">✕ Remove</button>
-        </div>`;
-    }).join("");
-  }
+            <div class="bill-item-meta">${fmt(b.allocated||0)} / ${fmt(b.target)} RWF allocated</div>
+            <div class="progress-track">
+              <div class="progress-fill fill-bills" style="width:${p}%"></div>
+            </div>
+            <button class="bill-delete" data-delete-bill="${b.id}">✕ Remove</button>
+          </div>`;
+      }).join("");
 }
 
 // ─── RENDER: SAVINGS PAGE ───────────────────
@@ -255,41 +308,35 @@ function renderSavingsPage() {
   document.getElementById("savingsTarget").innerHTML =
     fmt(totalTarget) + ' <span class="currency">RWF</span>';
 
-  // ── Savings targets list (now lives on this page) ──
   const targetsEl = document.getElementById("savingsTargetsList");
-  if (state.savingTargets.length === 0) {
-    targetsEl.innerHTML =
-      '<div class="empty-state">No savings targets.<br/>Tap ＋ to add one.</div>';
-  } else {
-    targetsEl.innerHTML = state.savingTargets.map(t => {
-      const p = pct(t.allocated || 0, t.target);
-      return `
-        <div class="bill-item">
-          <div class="bill-item-top">
-            <div class="bill-item-left">
-              <div class="bill-item-name">${escHtml(t.name)}</div>
-              <div style="margin-top:.3rem"><span class="bill-id-tag sav-tag">${escHtml(t.id)}</span></div>
+  targetsEl.innerHTML = state.savingTargets.length === 0
+    ? '<div class="empty-state">No savings targets.<br/>Tap ＋ to add one.</div>'
+    : state.savingTargets.map(t => {
+        const p = pct(t.allocated || 0, t.target);
+        return `
+          <div class="bill-item">
+            <div class="bill-item-top">
+              <div class="bill-item-left">
+                <div class="bill-item-name">${escHtml(t.name)}</div>
+                <div style="margin-top:.3rem"><span class="bill-id-tag sav-tag">${escHtml(t.id)}</span></div>
+              </div>
+              <div class="bill-item-pct" style="color:var(--purple)">${p}%</div>
             </div>
-            <div class="bill-item-pct" style="color:var(--purple)">${p}%</div>
-          </div>
-          <div class="bill-item-meta">${fmt(t.allocated||0)} / ${fmt(t.target)} RWF saved</div>
-          <div class="progress-track">
-            <div class="progress-fill fill-savings" style="width:${p}%"></div>
-          </div>
-          <button class="bill-delete" data-delete-saving="${t.id}">✕ Remove</button>
-        </div>`;
-    }).join("");
-  }
+            <div class="bill-item-meta">${fmt(t.allocated||0)} / ${fmt(t.target)} RWF saved</div>
+            <div class="progress-track">
+              <div class="progress-fill fill-savings" style="width:${p}%"></div>
+            </div>
+            <button class="bill-delete" data-delete-saving="${t.id}">✕ Remove</button>
+          </div>`;
+      }).join("");
 
-  // ── Savings ledger entries ──
   const entries = state.expenses
     .filter(e => !!e.savId)
     .sort((a, b) => b.ts - a.ts);
 
   const el = document.getElementById("savingsLedger");
   if (entries.length === 0) {
-    el.innerHTML =
-      '<div class="empty-state">No savings entries yet.<br/>Log an expense and link a SAV- ID to start.</div>';
+    el.innerHTML = '<div class="empty-state">No savings entries yet.<br/>Log an expense and link a SAV- ID to start.</div>';
     return;
   }
 
@@ -297,7 +344,7 @@ function renderSavingsPage() {
     const dt    = new Date(e.ts);
     const dtStr = dt.toLocaleDateString("en-GB", { day:"2-digit", month:"short" })
                 + " · " + dt.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
-    const tgt = state.savingTargets.find(t => t.id === e.savId);
+    const tgt   = state.savingTargets.find(t => t.id === e.savId);
     return `
       <div class="expense-item is-savings">
         <div class="exp-left">
@@ -320,23 +367,20 @@ function renderSettings() {
 
   const miscEl = document.getElementById("miscIncomeList");
   const miscs  = state.miscIncomes || [];
-  if (miscs.length === 0) {
-    miscEl.innerHTML =
-      '<div class="empty-state" style="padding:1rem">No misc income logged yet.</div>';
-  } else {
-    miscEl.innerHTML = [...miscs].reverse().map(m => {
-      const dt    = new Date(m.ts);
-      const dtStr = dt.toLocaleDateString("en-GB", { day:"2-digit", month:"short" });
-      return `
-        <div class="expense-item" style="margin-bottom:.5rem">
-          <div class="exp-left">
-            <div class="exp-name">${escHtml(m.label)}</div>
-            <div class="exp-meta">${dtStr} · ${m.id}</div>
-          </div>
-          <div class="exp-amount" style="color:var(--green)">+${fmt(m.amount)}</div>
-        </div>`;
-    }).join("");
-  }
+  miscEl.innerHTML = miscs.length === 0
+    ? '<div class="empty-state" style="padding:1rem">No misc income logged yet.</div>'
+    : [...miscs].reverse().map(m => {
+        const dt    = new Date(m.ts);
+        const dtStr = dt.toLocaleDateString("en-GB", { day:"2-digit", month:"short" });
+        return `
+          <div class="expense-item" style="margin-bottom:.5rem">
+            <div class="exp-left">
+              <div class="exp-name">${escHtml(m.label)}</div>
+              <div class="exp-meta">${dtStr} · ${m.id}</div>
+            </div>
+            <div class="exp-amount" style="color:var(--green)">+${fmt(m.amount)}</div>
+          </div>`;
+      }).join("");
 }
 
 // ─── RENDER ALL ─────────────────────────────
@@ -369,7 +413,6 @@ function closeModal(id) { document.getElementById(id).classList.remove("open"); 
 document.querySelectorAll("[data-close]").forEach(btn => {
   btn.addEventListener("click", () => closeModal(btn.dataset.close));
 });
-
 document.querySelectorAll(".modal-overlay").forEach(overlay => {
   overlay.addEventListener("click", e => {
     if (e.target === overlay) closeModal(overlay.id);
@@ -387,10 +430,9 @@ document.getElementById("submitExpense").addEventListener("click", () => {
   const amount = parseFloat(document.getElementById("expAmount").value);
   const rawId  = document.getElementById("expBillId").value.trim().toUpperCase();
 
-  if (!name)            { toast("⚠ Please enter a name."); return; }
+  if (!name)             { toast("⚠ Please enter a name."); return; }
   if (!amount || amount <= 0) { toast("⚠ Enter a valid amount."); return; }
 
-  // Determine if rawId points to a bill or a savings target
   let billId = null;
   let savId  = null;
 
@@ -398,14 +440,12 @@ document.getElementById("submitExpense").addEventListener("click", () => {
     const bill = state.bills.find(b => b.id === rawId);
     const sav  = state.savingTargets.find(t => t.id === rawId);
 
-    if (!bill && !sav) {
-      toast("⚠ ID \"" + rawId + "\" not found in bills or savings."); return;
-    }
+    if (!bill && !sav) { toast("⚠ ID \"" + rawId + "\" not found in bills or savings."); return; }
 
     if (bill) {
       const remaining = bill.target - (bill.allocated || 0);
       if (amount > remaining) {
-        toast("⚠ Over limit! " + escHtml(bill.name) + " only needs " + fmt(remaining) + " RWF more."); return;
+        toast("⚠ Over limit! " + bill.name + " only needs " + fmt(remaining) + " RWF more."); return;
       }
       billId = rawId;
       bill.allocated = (bill.allocated || 0) + amount;
@@ -414,7 +454,7 @@ document.getElementById("submitExpense").addEventListener("click", () => {
     if (sav) {
       const remaining = sav.target - (sav.allocated || 0);
       if (amount > remaining) {
-        toast("⚠ Over limit! " + escHtml(sav.name) + " only needs " + fmt(remaining) + " RWF more."); return;
+        toast("⚠ Over limit! " + sav.name + " only needs " + fmt(remaining) + " RWF more."); return;
       }
       savId = rawId;
       sav.allocated = (sav.allocated || 0) + amount;
@@ -422,13 +462,10 @@ document.getElementById("submitExpense").addEventListener("click", () => {
   }
 
   const expId   = uid("EXP-", state._nextExpId++);
-  const expense = { expId, name, amount, billId, savId, ts: Date.now() };
-  state.expenses.unshift(expense);
+  state.expenses.unshift({ expId, name, amount, billId, savId, ts: Date.now() });
 
-  saveState();
-  renderAll();
+  persist(); renderAll();
   closeModal("addExpenseModal");
-
   document.getElementById("expName").value   = "";
   document.getElementById("expAmount").value = "";
   document.getElementById("expBillId").value = "";
@@ -445,17 +482,12 @@ document.getElementById("submitBill").addEventListener("click", () => {
   if (!target || target <= 0) { toast("⚠ Enter a valid amount."); return; }
   if (!id)     { toast("⚠ Enter a Bill ID."); return; }
 
-  const allIds = [
-    ...state.bills.map(b => b.id),
-    ...state.savingTargets.map(t => t.id),
-  ];
+  const allIds = [...state.bills.map(b => b.id), ...state.savingTargets.map(t => t.id)];
   if (allIds.includes(id)) { toast("⚠ That ID already exists."); return; }
 
   state.bills.push({ id, name, target, allocated: 0 });
-  saveState();
-  renderAll();
+  persist(); renderAll();
   closeModal("addBillModal");
-
   document.getElementById("billName").value   = "";
   document.getElementById("billTarget").value = "";
   document.getElementById("billId").value     = "";
@@ -472,38 +504,33 @@ document.getElementById("submitSaving").addEventListener("click", () => {
   if (!target || target <= 0) { toast("⚠ Enter a valid amount."); return; }
   if (!id)     { toast("⚠ Enter a Savings ID."); return; }
 
-  const allIds = [
-    ...state.bills.map(b => b.id),
-    ...state.savingTargets.map(t => t.id),
-  ];
+  const allIds = [...state.bills.map(b => b.id), ...state.savingTargets.map(t => t.id)];
   if (allIds.includes(id)) { toast("⚠ That ID already exists."); return; }
 
   state.savingTargets.push({ id, name, target, allocated: 0 });
-  saveState();
-  renderAll();
+  persist(); renderAll();
   closeModal("addSavingModal");
-
   document.getElementById("savingName").value   = "";
   document.getElementById("savingTarget").value = "";
   document.getElementById("savingId").value     = "";
   toast("✓ Savings target added");
 });
 
-// ─── DELETE BILL (delegated) ─────────────────
+// ─── DELETE BILL ────────────────────────────
 document.getElementById("billsList").addEventListener("click", e => {
   const btn = e.target.closest("[data-delete-bill]");
   if (!btn) return;
   state.bills = state.bills.filter(b => b.id !== btn.dataset.deleteBill);
-  saveState(); renderAll();
+  persist(); renderAll();
   toast("Bill removed");
 });
 
-// ─── DELETE SAVING TARGET (delegated) ───────
+// ─── DELETE SAVING TARGET ───────────────────
 document.getElementById("savingsTargetsList").addEventListener("click", e => {
   const btn = e.target.closest("[data-delete-saving]");
   if (!btn) return;
   state.savingTargets = state.savingTargets.filter(t => t.id !== btn.dataset.deleteSaving);
-  saveState(); renderAll();
+  persist(); renderAll();
   toast("Savings target removed");
 });
 
@@ -518,7 +545,7 @@ document.getElementById("saveIncomeBtn").addEventListener("click", () => {
   if (!val || val <= 0) { toast("⚠ Enter a valid income amount."); return; }
   state.monthlyIncome = val;
   if (!state.month) state.month = currentMonthLabel();
-  saveState(); renderAll();
+  persist(); renderAll();
   document.getElementById("monthlyIncomeInput").value = "";
   toast("✓ Base income saved");
 });
@@ -528,14 +555,13 @@ document.getElementById("saveMiscIncomeBtn").addEventListener("click", () => {
   const label  = document.getElementById("miscIncomeLabel").value.trim();
   const amount = parseFloat(document.getElementById("miscIncomeAmount").value);
 
-  if (!label)  { toast("⚠ Enter a description for this income."); return; }
+  if (!label)  { toast("⚠ Enter a description."); return; }
   if (!amount || amount <= 0) { toast("⚠ Enter a valid amount."); return; }
 
   if (!state.miscIncomes) state.miscIncomes = [];
-  const id = uid("INC-", state._nextMiscId++);
-  state.miscIncomes.push({ id, label, amount, ts: Date.now() });
+  state.miscIncomes.push({ id: uid("INC-", state._nextMiscId++), label, amount, ts: Date.now() });
 
-  saveState(); renderAll();
+  persist(); renderAll();
   document.getElementById("miscIncomeLabel").value  = "";
   document.getElementById("miscIncomeAmount").value = "";
   toast("✓ Income of " + fmt(amount) + " RWF added");
@@ -567,10 +593,26 @@ document.getElementById("confirmResetBtn").addEventListener("click", () => {
     _nextSavingId: state._nextSavingId,
   };
 
-  saveState(); renderAll();
+  persist(); renderAll();
   closeModal("confirmResetModal");
   toast("✓ New month started");
 });
 
-// ─── INITIAL RENDER ─────────────────────────
+// ─── BOOT: load local first, then sync from remote ──
 renderAll();
+setSyncStatus("saving");
+
+loadRemote().then(remote => {
+  if (!remote) {
+    setSyncStatus("error");
+    return;
+  }
+  // Use remote if it's newer (higher _nextExpId = more entries)
+  if (remote._nextExpId > state._nextExpId) {
+    state = remote;
+    saveLocal(state);
+    renderAll();
+    toast("↓ Synced from cloud");
+  }
+  setSyncStatus("saved");
+});
