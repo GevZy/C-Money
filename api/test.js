@@ -1,22 +1,18 @@
-// api/test.js — temporary debug endpoint
-// Visit yoursite.vercel.app/api/test to see what's wrong
-// Delete this file once sync is working.
-
 import { Redis } from "@upstash/redis";
 
 export default async function handler(req, res) {
-  const results = {};
+  const results = {
+    has_kv_url:    !!process.env.KV_REST_API_URL,
+    has_kv_token:  !!process.env.KV_REST_API_TOKEN,
+    has_secret:    !!process.env.FINFLOW_SECRET,
+  };
 
-  // Check env vars exist
-  results.has_url   = !!process.env.UPSTASH_REDIS_REST_URL;
-  results.has_token = !!process.env.UPSTASH_REDIS_REST_TOKEN;
-  results.has_secret = !!process.env.FINFLOW_SECRET;
-
-  // Try a live Redis ping
   try {
-    const redis = Redis.fromEnv();
-    const ping  = await redis.ping();
-    results.redis_ping = ping; // should say "PONG"
+    const redis = new Redis({
+      url:   process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    });
+    results.redis_ping = await redis.ping();
   } catch (err) {
     results.redis_error = err.message;
   }
